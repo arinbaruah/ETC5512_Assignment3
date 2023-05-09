@@ -1,0 +1,360 @@
+---
+title: "Data deidentification and modification"
+bibliography: references.bib
+subtitle: ETC5512 Assignment 3, Master of Business Analytics
+author: Prepared by Arindom Baruah, 32779267, abar0090@student.monash.edu 
+date: '`r Sys.Date()`'
+output:
+  bookdown::html_document2:
+    biblio-style: "apalike"
+    link-citations: true
+    css: monashreport.css
+    includes:
+      before_body: header.html
+
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, 
+                      message = FALSE, 
+                      warning = FALSE)
+
+```
+
+
+```{r libraries}
+library(tidyverse)
+library(here)
+library(emo)
+library(kableExtra)
+library(ggrepel)
+library(lubridate)
+```
+
+# `r emo::ji("search")` Introduction
+
+With the growing use of data in all aspects of life, it is extremely important to use information collected from consumers in an ethical manner. While there are multiple schools of ethics to look into, it is important to note that the use of ethical practices should allow consumers to __not be directly affected__, thereby taking important measures to secure such sensitive information.
+
+However, with the global rise in cyber attacks and the unethical practices through wrongul usage of data, it is no longer sufficient to simply secure such data. Steps must be taken to prevent dissemination of personal information as well as to encrypt them so as to __de-identify in the event that the information is released as open data.__ Through the study of @dataethics, we have come to understand that it is not a specific technology (computers, tablets, mobile phones, online platforms, cloud computing and so forth), but __what any digital technology manipulates that represents the correct focus of our ethical strategies__. Furthermore, the prevalence of big data today is evermore critical as a result of its usefulness. However, based on a study by @kuc2020ethics, large datasets coupled with complex analytical algorithms pose the risk of non-transparency, unfairness, e.g., racial or class bias, cherry-picking of data, or even intentional misleading of public opinion, including policymakers, for example by tampering with the electoral process in the context of ‘cyberwars’. For example, various well known companies use customer data to manipulate the buying behavior of a person by specifically targeting certain products.
+
+Hence, before disseminating information to the larger public, it is important to prepare the data in an ethical manner which does not allow for any malicious actions against individuals or corporations who appear in the data. Following are the key considerations and steps taken while preparing the __"loan performance open data"__ by ABC bank.
+
+## `r emo::ji("male_detective")` Key considerations before data preparation
+
+The key steps to be taken before the preparation of the dataset are as follows:
+
+1. It is important to understand the __data protection laws__ prevalent in the geographical region the bank is located in. As the bank "ABC" is situated in the United States of America, the open data that will be published must __state and federal data protection laws__ enforced. While there is no one single data privacy rule in the USA, however, they do have largely sector specific federal and state laws such __as data security laws, secure destruction, Social Security number privacy, online privacy, biometric information privacy, and data breach notification laws__. These laws can be referred to in greater detail [here](https://www.dlapiperdataprotection.com/index.html?t=law&c=US).
+
+2. It is important to understand the ways in which, data can be misused so as to take the necessary steps to prevent such an event. Below are some of the common ways that data can be misused.
+
+   - <u> __Commingling__ </u>
+   
+   \n Commingling is when corporates or individuals capture data of a particular audience for a specific purpose but utilize the same for a separate task without citing the rightful source. Reusing data submitted for academic research, marketing purposes or sharing client data between sister organizations without consent are some of the most common commingling scenarios.
+   - <u> __Personal benefit__ </u>
+   
+   \n Personal data may be obtained so as to use it for an organization's or individual's personal gain. Such type of use of data could also have a malicious intent.
+   
+   - <u> __Ambiguity__ </u>
+   
+   \n Ambiguity occurs when organizations fail to explicitly disclose how user data is collected and what that data will be used for in a concise and accessible manner. 
+   
+3. Once the required data protection laws are studied in detail, a __data ethics checklist__ can be used to check for the required steps taken to create the re-distribute the open data on loan performance. We can refer to the data ethics checklist here [![Deon badge](https://img.shields.io/badge/ethics%20checklist-deon-brightgreen.svg?style=popout-square)](http://deon.drivendata.org/). 
+
+4. Based on the data ethics checklist, below are some of the important considerations to be taken into account before preparation of the dataset:
+
+
+   ### A. Data Collection                                                                                                                                                                                                                               
+ **A.1 Informed consent**: If there are human subjects, have they given informed consent, where subjects affirmatively opt-in and have a clear understanding of the data uses to which they consent?"                                            
+ **A.2 Collection bias**: Have we considered sources of bias that could be introduced during data collection and survey design and taken steps to mitigate those?"                                                                               
+ **A.3 Limit PII exposure**: Have we considered ways to minimize exposure of personally identifiable information (PII) for example through anonymization or not collecting information that isn't relevant for analysis?"                        
+ **A.4 Downstream bias mitigation**: Have we considered ways to enable testing downstream results for biased outcomes (e.g., collecting data on protected group status like race or gender)?"                                                    
+                                                                                                                                                                                                                                                   
+   ### B. Data Storage                                                                                                                                                                                                                                   
+ **B.1 Data security**: Do we have a plan to protect and secure data (e.g., encryption at rest and in transit, access controls on internal users and third parties, access logs, and up-to-date software)?"                                      
+ **B.2 Right to be forgotten**: Do we have a mechanism through which an individual can request their personal information be removed?                                                                                                       
+ **B.3 Data retention plan**: Is there a schedule or plan to delete the data after it is no longer needed?                                                                                                                                
+
+## `r emo::ji('warning')` Removal of direct identifiers
+
+Direct identifiers are the variables which can pin-point an individual in a dataset. Often, these variables consist of __personal information__ which can be __used with malicious intent__ if not removed before the data is released to the open public. The following are the variables which act as direct identifers and are removed from the raw dataset.
+
+- First name ( __first_name__ ) 
+
+- Last name ( __last_name__ ) 
+
+
+```{r load_data}
+loan_data_raw <- read_rds(here::here('raw_data/loanData.rds'))
+```
+
+
+```{r remove_direct_identifiers, echo=TRUE,include=TRUE}
+
+loan_data_filtered_directid <- loan_data_raw %>% select(-c('last_name','first_name'))
+
+```
+
+## `r emo::ji('road')` Handling quasi-identifiers
+
+Quasi-identifiers are the pieces of information which are not able to directly identify an individual but are sufficient to combine together to reasonably be able to identify information.
+
+Various techniques will be used for suppressing sensitive information which will be delineated as follows:
+
+### Removal of variables
+
+Certain quasi-identifiers __will be removed__ from the final dataset as these set of variables may not contribute much to assess loan performance. These variables consist data of unique loan id and geographical data. Following are the list of variables that will be dropped to reduce the risk of re-identification :
+
+- Loan identifier ( __loan_id__ )
+- Seller name ( __seller__ )
+- Property state ( __state__ )
+- Zip code short ( __zip_3__ )
+- Servicer name ( __servicer__ )
+- Metropolitan Statistical Area ( __msa__ )
+
+```{r remove_quasi_id}
+
+loan_data_filtered_quasi <- loan_data_filtered_directid %>% select(-c('loan_id','seller','state','zip_3','servicer','msa'))
+
+```
+
+### Aggregation
+
+Aggregation method may be utilised for grouping data into bins. This would prevent identification of a person based on unique values observed within the dataset.
+
+#### <u> Customer Age </u>
+
+
+```{r agehist,fig.cap='Distribution of customer age',fig.align='center'}
+options(scipen = 999) #To remove scientific notation on the graph
+pl1 <- ggplot(data=loan_data_filtered_quasi,aes(x=cus_age)) + geom_histogram(color='red') + ggtitle("Customer age distribution") +
+  labs(x='Customer age',y='Number of people')
+print(pl1)
+
+```
+As we can observe from figure \@ref(fig:agehist), the customer ages are __uniformly distributed__. Although this is ideal as there are no __outliers__, the ages will be aggregated into age groups to aid further de-identification. In addition, the ages higher than 44 years in the distribution are bottom coded to __"> 44 years"__, thereby preventing identification of groups that are aged 45 years in the distribution.
+
+```{r ageaggregate,fig.cap='Count of individuals for each age group',fig.align='center'}
+
+loan_data_age_grouped <- loan_data_filtered_quasi %>% 
+  mutate(cus_age_group = case_when((cus_age >=30 & cus_age<35) ~ "30-34",
+                                   (cus_age >=35 & cus_age<40) ~ "35-39",
+                                   (cus_age >=40 & cus_age<45) ~ "40-44",
+                                   (cus_age >=45) ~ "> 44 years")) %>% select(-cus_age)
+
+age_groups <- c("30-34","35-39","40-44","> 44 years")
+
+pl2 <- ggplot(loan_data_age_grouped %>% group_by(cus_age_group) %>% 
+                summarise(count = n()),
+              aes(x=factor(cus_age_group,age_groups,age_groups), 
+                  y=count,fill=cus_age_group)) + 
+  geom_col(stat='identity',color='black') + theme_classic() +
+  geom_text(aes(label=count),vjust=1.5) + theme(legend.position = 'none',axis.text.x = element_text(face='bold')) + ggtitle('Aggregated age') +
+  labs(x="Age groups",y='Number of credit borrowers') 
+print(pl2)
+
+```
+
+Figure \@ref(fig:ageaggregate) depicts the count of individuals after aggregating the customer ages into age groups and bottom coding the individuals of 45 years as "> 44 years". 
+
+### <u> Number of dependents </u>
+
+The number of dependents may not directly provide information on loan performance of a bank. However, it can __provide important information regarding the ability to repay back the loans__ without defaulting. However, as this data maybe prone to malicious misuse, hence the data maybe encoded as a binary indicator of whether a borrower has any dependents (encoded as 1) or not (encoded as 0).
+
+```{r dependents,fig.cap='Indicator for dependets of borrwer',fig.align='center'}
+loan_data_new <- loan_data_age_grouped %>% 
+  mutate(have_dependents = case_when( no_depend == 0 ~ "No",
+                                      no_depend > 0 ~ "Yes")) %>% select(-no_depend)
+
+pl3 <- ggplot(data = loan_data_new %>% 
+                count(have_dependents),
+              aes(x=have_dependents,y=n,fill=have_dependents)) + geom_col(color='black') + theme_classic() + coord_flip() + labs(x='Any dependents for the borrower ?',y='Count of borrowers') + theme(legend.position = 'none') 
+print(pl3) 
+
+```
+
+#### <u> Credit score of borrower </u>
+
+The credit industry in the US utilises a FICO score (C-score) to assess the ability of a borrower to repay back the credited money. Based on the credit score, a bank or any finanical institution may decide to extend credit support of a borrower. Based on [Forbes](https://www.forbes.com/advisor/credit-score/what-is-a-good-credit-score/), the credit score of a borrower may be divided into specific categories. These categories can be created through data aggregation which will provide us with the added benefit of de-identification of data containing unique values of C-scores. Table \@ref(tab:tabscore) are the aggregations that will be performed for the Credit risk scores of borrower and co-borrower.
+
+
+
+```{r tabscore}
+Scores <- c("0-580","580-670","670-740","740-800","800-850")
+Ratings <- c("Poor","Fair","Good","Very Good","Excellent")
+
+df_ratings <- data.frame(Scores,Ratings)
+
+df_ratings %>% kable(caption = 'Credit score ratings',booktabs = TRUE) %>% 
+  kable_styling(bootstrap_options = c("bordered","hover")) %>%
+  row_spec(0,background="rgb(172,175,145)",color='black',font_size = 18)
+
+```
+
+```{r cscoreb,fig.cap="Aggregated Credit Score of Borrower",fig.align='center'}
+
+loan_data_new <- loan_data_new %>% 
+  mutate(cscore_b_rate = case_when( cscore_b > 0 & cscore_b <580 ~ "Poor",
+                               cscore_b >= 580 & cscore_b <670 ~ "Fair",
+                               cscore_b >=670  & cscore_b <740 ~ "Good",
+                               cscore_b >= 740 & cscore_b < 800 ~ "Very Good",
+                               cscore_b >= 800 ~ "Excellent"
+                               )) %>% select(-cscore_b)
+
+
+
+pl6 <- ggplot(data= loan_data_new %>% 
+                count(cscore_b_rate), aes(x = "", y=n, fill = cscore_b_rate)) + 
+  geom_col(color='black') + 
+  theme_classic() +
+  coord_polar(theta='y') + 
+  ggtitle("Aggregated borrower credit score") +
+  geom_label_repel(aes(label = n),
+             position = position_stack(vjust = 0.5),
+             show.legend = FALSE)  +
+  theme(axis.title.x = element_blank(), axis.title.y = element_blank(), axis.text = element_blank()) + labs(fill = 'Borrower credit score rating')
+print(pl6)
+
+```
+
+As we can observe from the pie chart in figure \@ref(fig:cscoreb), there is only one individual with a borrower credit score of 0-580 (Poor category). Since this person can easily re-identify themselves, we can exercise __value suppression__ by changing the borrower's credit score to a __null value (NA)__ which will prevent any possible re-identification as depicted by figure \@ref(fig:aggsup).
+
+```{r aggsup, fig.cap="Aggregated borrower's credit score with value suppression",fig.align='center'}
+loan_data_new <- loan_data_new %>% mutate(cscore_b_rate =  ifelse(cscore_b_rate=="Poor",NA,cscore_b_rate))
+
+
+
+pl7 <- ggplot(data= loan_data_new %>% 
+                count(cscore_b_rate), aes(x = "", y=n, fill = cscore_b_rate)) + 
+  geom_col(color='black') + 
+  theme_classic() +
+  coord_polar(theta='y') + 
+  ggtitle("Aggregated borrower credit score after value suppression") +
+  geom_label_repel(aes(label = n),
+             position = position_stack(vjust = 0.5),
+             show.legend = FALSE)  +
+  theme(axis.title.x = element_blank(), axis.title.y = element_blank(), axis.text = element_blank()) + labs(fill = 'Borrower credit score rating')
+print(pl7)
+```
+
+Figure \@ref(fig:cscorec) depicts a pie chart of the spread of the credit score for co-borrowers if applicable. As there are fair number of individuals in each category, it can be reasonably assumed that no single individual will be able to re-identify themselves through this aggregation.
+
+```{r cscorec,fig.cap="Aggregated co-borrower's credit score with value suppression",fig.align='center'}
+
+
+loan_data_new <- loan_data_new %>% 
+  mutate(cscore_c_rate = case_when( cscore_c > 0 & cscore_c <580 ~ "Poor",
+                               cscore_c >= 580 & cscore_c <670 ~ "Fair",
+                               cscore_c >=670  & cscore_c <740 ~ "Good",
+                               cscore_c >= 740 & cscore_c < 800 ~ "Very Good",
+                               cscore_c >= 800 ~ "Excellent"
+                               )) %>% select(-cscore_c)
+
+
+pl8 <- ggplot(data= loan_data_new %>% 
+                count(cscore_c_rate), aes(x = "", y=n, fill = cscore_c_rate)) + 
+  geom_col(color='black') + 
+  theme_classic() +
+  coord_polar(theta='y') + 
+  ggtitle("Aggregated co-borrower credit score") +
+  geom_label_repel(aes(label = n),
+             position = position_stack(vjust = 0.5),
+             show.legend = FALSE)  +
+  theme(axis.title.x = element_blank(), axis.title.y = element_blank(), axis.text = element_blank()) + labs(fill = "Co-borrower's credit score rating")
+print(pl8)
+```
+
+
+## Data Perturbration and Cell Suppression
+
+De-identification through the use of perturbation and suppression techniques can be useful to help de-identify any unique values in the dataset. However, the noise added to the dataset must be reasonable and should not drastically skew the dataset.
+
+### <u> Income of main borrower <\u>
+
+Since the income of borrowers will be well known to them, in order to mask these values, data can be perturbed by __creating noise in the data__. For outliers, we can apply cell suppression __to replace these high income values with null values__. Figure \@ref(fig:currentincomedist) depicts the boxplots indicating the current distribution of the incomes for various age groups before the addition of noise through perturbation and consequent cell suppression.
+
+Upon going through the dataset for the income, it can be observed that some particular values of incomes are unique and can be easily re-identified. Hence, a reasonable amount of noise is applied to the dataset to de-identify the data without drastically changing the distribution across the various age-groups. 
+
+The noise addition was performed as a function of the overall magnitude of the income. The following strategy was applied while adding noise to the dataset.
+
+- All noise additions were performed using a __normal distribution.__
+- For income values __between 0 percentile (20000$) to 25th percentile (255296 $) __, the noise was normally distributed __between 10-250 $__.
+- For income values __between 25th percentile to 75th percentile (755076 $) __, the noise was normally distributed __between 50-500 $__.
+- For income values __between 75th percentile to 99th percentile (990189 $) __, the noise was normally distributed __between 500-1000 $__.
+- For income values __between 99th percentile to 100th percentile (100000 $) __, the new incomes were replaced by null (NA) values as these represent the __top 1 percentile__ of the earning population and can be re-identified due to the low population in the sub-category. Hence, __cell suppression technique__ was applied. 
+
+As observed through figure \@ref(fig:didinc), the boxplots for various age groups after noise addition and cell suppression __indicate a similar distribution to the original incomes__ for the various age groups in the dataset. 
+
+
+```{r currentincomedist,fig.cap="Income distribution before perturbation and suppression",fig.align='center'}
+
+pl4<- ggplot(data = loan_data_new, aes(y= income,x=)) + geom_boxplot(color='red') + labs(y='Income of main borrower ($)') + facet_grid(~factor(cus_age_group,levels = age_groups)) + ggtitle("Income distribution for various age groups before added noise and cell suppression") +
+  theme(axis.text.x = element_blank())
+print(pl4)
+
+
+```
+
+```{r didinc,fig.cap="Income distribution after perturbation and suppression",fig.align='center'}
+loan_data_new <- loan_data_new %>% 
+  mutate(new_income = case_when( 
+  (income < quantile(income,0.25)) ~ (income + rnorm(n(),10,250)),
+  
+  (income >= quantile(income,0.25)) & (income < quantile(income,0.75)) ~ (income + rnorm(n(),50,500)) ,
+  
+  (income >= quantile(income,0.75)) & (income < quantile(income,0.99)) ~ (income + rnorm(n(),500,1000)))) %>% select(-income)  # Perturbation and cell suppression
+
+pl5<- ggplot(data = loan_data_new, aes(y= new_income,na.rm=TRUE)) + geom_boxplot(color='red') + labs(y='Income of main borrower ($)') +  facet_grid(~factor(cus_age_group,levels = age_groups)) + ggtitle("Income distribution after noise and suppression for various age groups") + theme(axis.text.x=element_blank())
+print(pl5)
+
+```
+
+
+## Ommision of specific date
+
+### <u> Loan first modifcation date <\u>
+
+Upon looking into the loan first modification date, we can observe that while the data only contains the month and the year, however for the __year of 2017__, the individual maybe uniquely identified as there is only one observation in the month of __October__. 
+```{r fmoddate,fig.cap="Loan modification month in 2017",fig.align='center'}
+
+loan_data_new$fmod_dte <- ymd(loan_data_new$fmod_dte)
+
+mod_17 <- loan_data_new %>% filter(year(fmod_dte)==2017)
+
+borrowers <- 0:10
+pl9 <- ggplot(data = mod_17, aes(x=fmod_dte)) + geom_bar(fill='blue',color='black') + 
+  labs(y='Number of borrowers',x='Month of loan modification date') + theme_classic() +
+  ggtitle("Loan modification month in 2017") + theme(plot.title = element_text(hjust=0.5)) +
+  scale_y_continuous(labels = as.character(borrowers),breaks = borrowers)
+print(pl9)
+
+```
+As we can observe figure \@ref(fig:fmoddate), the individual who got his loan modified in the month of October for the year 2017 can re-identify themselves. We can use the technique of __Ommision of specific date__ which would mask a specific date to aid in the de-identification process. In this process, we can cluster a specific date to a period where multiple other modification dates are present.
+
+```{r fmoddateomit,fig.cap="Loan modification month after date suppression",fig.cap='center'}
+
+
+loan_data_new <- loan_data_new %>% 
+  mutate(fmod_dte_new = ifelse(year(fmod_dte)==2017 & month(fmod_dte)==10,
+                               ymd("2017-12-01"),
+                               fmod_dte)) %>% select(-fmod_dte)
+
+loan_data_new$fmod_dte_new <- as.Date(loan_data_new$fmod_dte_new, origin="1970-1-1")
+
+pl10 <- ggplot(data = loan_data_new %>% filter(year(fmod_dte_new)==2017), aes(x=fmod_dte_new)) + geom_bar(fill='#007f00',color='black') + 
+  labs(y='Number of borrowers',x='Month of loan modification date') + theme_classic() +
+  ggtitle("Loan modification months in 2017 after date suppression") + theme(plot.title = element_text(hjust=0.5)) +
+  scale_y_continuous(labels = as.character(borrowers),breaks = borrowers)
+print(pl10)
+
+
+```
+
+As we can observe from \@ref(fig:fmoddateomit), the single individual with loan modification date in October 2017 has been __added to the data of loan modification date in December 2017__. This will prevent re-identification of the person from the dataset.
+
+
+
+# Reference
+
+Cite your data sources, and software used here. 
+
+
