@@ -14,21 +14,33 @@ output:
 
 ---
 
+```{css, echo=FALSE}
+.watch-out {
+  background-color: lightgray;
+  border: 3px solid black;
+  font-weight: bold;
+  
+}
+```
+
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = FALSE, 
+knitr::opts_chunk$set(echo = TRUE, 
                       message = FALSE, 
-                      warning = FALSE)
+                      warning = FALSE,
+                      class.source='watch-out')
 
 ```
 
 
-```{r libraries}
+```{r libraries,echo=FALSE}
 library(tidyverse)
 library(here)
 library(emo)
+library(ggplot2)
 library(kableExtra)
 library(ggrepel)
 library(lubridate)
+library(scales)
 ```
 
 # `r emo::ji("search")` Introduction
@@ -60,7 +72,9 @@ The key steps to be taken before the preparation of the dataset are as follows:
    
 3. Once the required data protection laws are studied in detail, a __data ethics checklist__ can be used to check for the required steps taken to create the re-distribute the open data on loan performance. We can refer to the data ethics checklist here [![Deon badge](https://img.shields.io/badge/ethics%20checklist-deon-brightgreen.svg?style=popout-square)](http://deon.drivendata.org/). 
 
-4. Based on the data ethics checklist, below are some of the important considerations to be taken into account before preparation of the dataset:
+4. After going through the data, any __redundant variable__ which does not add any form of information to the reader can be removed from the dataset. In this dataset, we observe that the variables __repch_flag (Repurchase the mortgage loan) and aqsn_dte (Acquisition date)__ has only 0s in the entire column and hence, does not provide any insights for loan performance evaluation. As a result, this variable can be removed in the finalised dataset.
+
+5. Based on the data ethics checklist, below are some of the important considerations to be taken into account before preparation of the dataset:
 
 
    ### A. Data Collection                                                                                                                                                                                                                               
@@ -72,7 +86,23 @@ The key steps to be taken before the preparation of the dataset are as follows:
    ### B. Data Storage                                                                                                                                                                                                                                   
  **B.1 Data security**: Do we have a plan to protect and secure data (e.g., encryption at rest and in transit, access controls on internal users and third parties, access logs, and up-to-date software)?"                                      
  **B.2 Right to be forgotten**: Do we have a mechanism through which an individual can request their personal information be removed?                                                                                                       
- **B.3 Data retention plan**: Is there a schedule or plan to delete the data after it is no longer needed?                                                                                                                                
+ **B.3 Data retention plan**: Is there a schedule or plan to delete the data after it is no longer needed?      
+ 
+ 
+# `r emo::ji('spanner')` Methodology
+
+## 🕹️ De-Identification Strategies
+
+Following are the primary de-identification strategies applied on the various variables in the raw dataset:
+
+__1. Selection and removal of variables.__
+__2. Aggregation__ 
+__3. Top and Bottom coding__
+__4. Perturbation__
+__5. Specific date omission__
+__6. Cell suppression__
+__7. Value suppression__
+
 
 ## `r emo::ji('warning')` Removal of direct identifiers
 
@@ -117,9 +147,10 @@ loan_data_filtered_quasi <- loan_data_filtered_directid %>% select(-c('loan_id',
 
 ```
 
-### Aggregation
+### Aggregation and top or bottom coding
 
 Aggregation method may be utilised for grouping data into bins. This would prevent identification of a person based on unique values observed within the dataset.
+
 
 #### <u> Customer Age </u>
 
@@ -139,7 +170,7 @@ loan_data_age_grouped <- loan_data_filtered_quasi %>%
   mutate(cus_age_group = case_when((cus_age >=30 & cus_age<35) ~ "30-34",
                                    (cus_age >=35 & cus_age<40) ~ "35-39",
                                    (cus_age >=40 & cus_age<45) ~ "40-44",
-                                   (cus_age >=45) ~ "> 44 years")) %>% select(-cus_age)
+                                   (cus_age >=45) ~ "> 44 years")) 
 
 age_groups <- c("30-34","35-39","40-44","> 44 years")
 
@@ -156,14 +187,15 @@ print(pl2)
 
 Figure \@ref(fig:ageaggregate) depicts the count of individuals after aggregating the customer ages into age groups and bottom coding the individuals of 45 years as "> 44 years". 
 
-### <u> Number of dependents </u>
+#### <u> Number of dependents </u>
 
 The number of dependents may not directly provide information on loan performance of a bank. However, it can __provide important information regarding the ability to repay back the loans__ without defaulting. However, as this data maybe prone to malicious misuse, hence the data maybe encoded as a binary indicator of whether a borrower has any dependents (encoded as 1) or not (encoded as 0).
 
 ```{r dependents,fig.cap='Indicator for dependets of borrwer',fig.align='center'}
 loan_data_new <- loan_data_age_grouped %>% 
-  mutate(have_dependents = case_when( no_depend == 0 ~ "No",
-                                      no_depend > 0 ~ "Yes")) %>% select(-no_depend)
+  mutate(have_dependents = case_when( no_depend == 0 ~ "None",
+                                      no_depend == 1 ~ "Single",
+                                      no_depend > 1 ~ "Multiple")) 
 
 pl3 <- ggplot(data = loan_data_new %>% 
                 count(have_dependents),
@@ -171,6 +203,89 @@ pl3 <- ggplot(data = loan_data_new %>%
 print(pl3) 
 
 ```
+
+#### <u> Original Interest Rate </u> {#sectionlabel1}
+
+Original interest rates are generally well known to customers and hence, can be easily re-identified by the individual in a dataset. There are a total of `r loan_data_new %>% count(orig_rt) %>% filter(n==1) %>% nrow()` unique values in the dataset. 
+
+```{r origrte,fig.cap='Distribution of the original interest rates',fig.align='center'}
+
+pl13 <- ggplot(data= loan_data_new,aes(x=orig_rt,fill='red')) + geom_histogram(alpha=0.7,color='black') + theme_classic() +
+  labs(x='Original interest rate (in %)', y="Number of individuals") + ggtitle("Distribution of original interest rate") +theme(legend.position = 'none',plot.title = element_text(hjust=0.5))
+print(pl13)
+```
+
+As we can observe from figure \@ref(fig:origrte), __majority of the interest rates__ lie between __2.5 % and 6.5 %__. One way to de-identify the loan interest rates would be to aggregate the interest rates as shown below. Figure \@ref(fig:origrtagg) depicts the number of borrowers based on the various aggregated interest rates.
+
+- __0 - 2.5 %__
+- __2.5 - 3.5 %__
+- __3.5 - 4.5 %__
+- __4.5 - 5.5 %__
+- __5.5 - 6.5 %__
+- __> 6.5 %__
+
+```{r origrtagg,fig.cap='Original interest rates after aggregation',fig.align='center'}
+loan_data_new <- loan_data_new %>% mutate(orig_rt_grouped = case_when((orig_rt <= 2.5) ~ "0-2.5",
+                                   (orig_rt > 2.5 & orig_rt <= 3.5) ~ "2.5-3.5",
+                                   (orig_rt > 3.5 & orig_rt <= 4.5) ~ "3.5-4.5",
+                                   (orig_rt > 4.5 & orig_rt <= 5.5) ~ "4.5-5.5",
+                                   (orig_rt > 5.5 & orig_rt <= 6.5) ~ "5.5-6.5",
+                                   (orig_rt > 6.5 ) ~ "> 6.5"))
+
+loan_breaks <- c("0-2.5","2.5-3.5","3.5-4.5","4.5-5.5","5.5-6.5","> 6.5")
+
+
+pl14 <- ggplot(data= loan_data_new %>% count(orig_rt_grouped), aes(x=factor(orig_rt_grouped,loan_breaks,loan_breaks),y=n,fill=orig_rt_grouped)) + theme_classic() +
+  geom_text(aes(label=n),vjust=-0.7,size=3) + 
+  geom_col(color='black',alpha=0.7) + labs(x='Original Interest Rate (in %)',y='Number of borrowers') + labs(fill='Interest rate') + ggtitle("Original interest rates after aggregation") + theme(plot.title = element_text())
+
+print(pl14)
+
+
+
+```
+#### <u> Last loan rate </u>
+
+The last loan rate is a value that can be easily identified by a person similar to what was discussed in section \@ref(sectionlabel1). Hence, a similar aggregation strategy will be implemented to aid the de-identification process.
+
+```{r lastrte,fig.cap='Distribution of the last interest rates',fig.align='center'}
+
+pl18 <- ggplot(data= loan_data_new,aes(x=last_rt)) + geom_histogram(alpha=0.7,color='black',fill='#6699ff') + theme_classic() +
+  labs(x='Last interest rate (in %)', y="Number of individuals") + ggtitle("Distribution of last interest rate") +theme(legend.position = 'none',plot.title = element_text(hjust=0.5))
+
+print(pl18)
+```
+Figure \@ref(fig:lastagg) depicts the number of borrowers based on the various aggregated interest rates.
+
+- __0 - 2.5 %__
+- __2.5 - 3.5 %__
+- __3.5 - 4.5 %__
+- __4.5 - 5.5 %__
+- __5.5 - 6.5 %__
+- __> 6.5 %__
+
+```{r lastagg,fig.cap='Original interest rates after aggregation',fig.align='center'}
+loan_data_new <- loan_data_new %>% mutate(last_rt_grouped = case_when((last_rt <= 2.5) ~ "0-2.5",
+                                   (last_rt > 2.5 & last_rt <= 3.5) ~ "2.5-3.5",
+                                   (last_rt > 3.5 & last_rt <= 4.5) ~ "3.5-4.5",
+                                   (last_rt > 4.5 & last_rt <= 5.5) ~ "4.5-5.5",
+                                   (last_rt > 5.5 & last_rt <= 6.5) ~ "5.5-6.5",
+                                   (last_rt > 6.5 ) ~ "> 6.5"))
+
+loan_breaks <- c("0-2.5","2.5-3.5","3.5-4.5","4.5-5.5","5.5-6.5","> 6.5")
+
+
+pl19 <- ggplot(data= loan_data_new %>% count(last_rt_grouped), aes(x=factor(last_rt_grouped,loan_breaks,loan_breaks),y=n,fill=last_rt_grouped)) + theme_classic() +
+  geom_text(aes(label=n),vjust=-0.7,size=3) + 
+  geom_col(color='black',alpha=0.7) + labs(x='Last Interest Rate (in %)',y='Number of borrowers') + labs(fill='Interest rate') + ggtitle("Last interest rates after aggregation") + theme(plot.title = element_text()) + scale_fill_brewer(palette = 'Paired')
+
+print(pl19)
+
+
+
+```
+
+
 
 #### <u> Credit score of borrower </u>
 
@@ -198,7 +313,7 @@ loan_data_new <- loan_data_new %>%
                                cscore_b >=670  & cscore_b <740 ~ "Good",
                                cscore_b >= 740 & cscore_b < 800 ~ "Very Good",
                                cscore_b >= 800 ~ "Excellent"
-                               )) %>% select(-cscore_b)
+                               )) 
 
 
 
@@ -232,7 +347,9 @@ pl7 <- ggplot(data= loan_data_new %>%
   geom_label_repel(aes(label = n),
              position = position_stack(vjust = 0.5),
              show.legend = FALSE)  +
-  theme(axis.title.x = element_blank(), axis.title.y = element_blank(), axis.text = element_blank()) + labs(fill = 'Borrower credit score rating')
+  theme(axis.title.x = element_blank(), 
+        axis.title.y = element_blank(), 
+        axis.text = element_blank()) + labs(fill = 'Borrower credit score rating')
 print(pl7)
 ```
 
@@ -247,7 +364,7 @@ loan_data_new <- loan_data_new %>%
                                cscore_c >=670  & cscore_c <740 ~ "Good",
                                cscore_c >= 740 & cscore_c < 800 ~ "Very Good",
                                cscore_c >= 800 ~ "Excellent"
-                               )) %>% select(-cscore_c)
+                               )) 
 
 
 pl8 <- ggplot(data= loan_data_new %>% 
@@ -263,12 +380,131 @@ pl8 <- ggplot(data= loan_data_new %>%
 print(pl8)
 ```
 
+### <u> Number of borrowers </u>
 
-## Data Perturbration and Cell Suppression
+As the number of borrowers would be well known by a customer, hence the outliers must be masked using top coding technique. 
+
+```{r tabbo,fig.cap="Number of borrwers for a loan before top encoding",fig.align='center'}
+orig_borrowers <- loan_data_new %>% count(num_bo)
+
+
+pl16 <- ggplot(data=orig_borrowers, aes(x=num_bo,y=n,fill=as.factor(num_bo))) + geom_text(aes(label=n),vjust=-0.7,size=3) + 
+  geom_col(alpha=0.7,color='black') + theme_classic() + scale_x_continuous(labels= 1:7,breaks = 1:7) + labs(x="Number of borrowers",y="Count",fill='Number of \n borrowers registering for a loan') +  
+  ggtitle("Before top encoding") + 
+  theme(legend.title = element_text(size = 6),plot.title=element_text(hjust=0.5))
+print(pl16)
+
+
+```
+As we can observe from figure \@ref(fig:tabbo), there are __only 5 cases with 6 borrowers for the loan and 1 case with 7 borrowers for the loan__. These individuals maybe able to re-identify themselves due to their low population count. Hence, a __top encoding strategy__ is implemented to mask all the outliers to aid in the de-identification process as shown by figure \@ref(fig:tabbonew).
+
+```{r tabbonew, fig.cap="Number of borrowers after top encoding",fig.align='center'}
+
+loan_data_new <- loan_data_new %>% mutate(num_bo_new = ifelse(num_bo >=5,"> 4",num_bo))
+
+borrowers_new <- c("1","2","3","4","> 4")
+
+pl17 <- ggplot(data= loan_data_new %>% count(num_bo_new), 
+               aes(x=factor(num_bo_new,borrowers_new,borrowers_new),
+                   y=n,fill=as.factor(num_bo_new))) + geom_col(color='black') + 
+  geom_text(aes(label=n),vjust=-0.7,size=3) + 
+  theme_classic() +
+  labs(x="Number of borrowers", y="Count") + ggtitle("After top encoding") +
+  theme(legend.position = 'none',plot.title = element_text(hjust=0.5),axis.text.x = element_text(face='bold')) 
+
+                                                                                                                    
+print(pl17)
+```
+
+#### <u> Debt to income ratio </u>
+
+Debt and income are values that are known to an individual borrower and hence, can use this data to re-identify oneself in a dataset. Currently, there are `r loan_data_new %>% count(dti) %>% filter(n==1) %>% nrow()` unique values in the dataset which will be subsequently de-identified using a top encoding strategy. Table \@ref(tab:dti) depicts the top coded term __"> 50"__ debt to income which prevents any form of re-identification.
+
+```{r dti}
+
+loan_data_new <- loan_data_new %>% mutate(dti_new = ifelse(dti > 50,"> 50",dti))
+
+dti_out <- loan_data_new %>% count(dti_new) %>% arrange(n) %>% head(5)
+dti_out <- dti_out %>% rename("Debt to income ratio"="dti_new","Count"="n")
+
+dti_out %>% kable(caption = 'Debt to income ratio with lowest counts after',booktabs = TRUE) %>% 
+  kable_styling(bootstrap_options = c("bordered","hover")) %>%
+  row_spec(0,background="rgb(172,175,145)",color='black',font_size = 18)
+
+```
+
+#### <u> Unpaid balance at the time of removal </u>
+
+The unpaid balance (UPB) at the end of a loan term can be __computed by a borrower__ to re-identify oneself in a dataset. An aggregation strategy maybe utilized to implement the required de-identification strategy. Figure \@ref(fig:upbhist1) depicts the distribution of the unpaid balance data alongwith the aggregated factors.
+
+Following are the factors applied to this data and the values against each level is depicted by figure \@ref(fig:distupbagg) :
+
+- __0-1000 $__ : __No UPB or low UPB__
+- __1000-50000 $__: __Level 1 (L1)__
+- __50000-100000 $__: __Level 2(L2)__
+- __100000-250000 $__: __Level 3(L3)__
+- __250000-518000 $__: __Level 4(L4)__
+- __Greater than 518000 $__ : __Level 5(L5)__
+
+```{r upbhist1,fig.cap="Distribution of UPB before aggregation",fig.align='center'}
+
+outlier_upb <- IQR(loan_data_new$last_upb,na.rm=TRUE) * 1.5 + quantile(loan_data_new$last_upb,0.75,na.rm=TRUE)
+
+pl20 <- ggplot(data=loan_data_new,aes(x=last_upb)) + geom_histogram(color='black',fill='#ffdb4d',alpha=0.7) + 
+  theme_classic() + labs(x="Last unpaid balance (in $)",y="Number of borrowers") + 
+  ggtitle("Distribution of UPB before aggregation") + 
+  theme(plot.title = element_text(hjust=0.5)) +
+  annotate("segment", x = 1, xend = 1, y = 0, yend = 750000,colour = "red",alpha=0.6,linetype=3) +
+  annotate("segment", x = outlier_upb  , xend = outlier_upb, y = 0, yend = 750000,colour = "red",alpha=0.6,linetype=3) +
+  annotate("segment", x = 50000  , xend = 50000, y = 0, yend = 750000,colour = "red",alpha=0.6,linetype=3) +
+  annotate("segment", x = 100000  , xend = 100000, y = 0, yend = 750000,colour = "red",alpha=0.6,linetype=3) +
+  annotate("segment", x = 250000  , xend = 250000, y = 0, yend = 750000,colour = "red",linetype=3) +
+  annotate("text", x = 0, y= 800000, colour = "darkgreen",label='Low/Nil UPB',size = unit(3, "pt")) +
+  annotate("text", x = 25000, y= 600000, colour = "black",label='L1',size = unit(3, "pt")) +
+  annotate("text", x = 80000, y= 700000, colour = "black",label='L2',size = unit(3, "pt")) +
+  annotate("text", x = 200000, y= 700000, colour = "#ff884d",label='L3',size = unit(3, "pt")) +
+  annotate("text", x = 400000, y= 700000, colour = "#ff661a",label='L4',size = unit(3, "pt")) +
+  annotate("text", x = 1000000, y= 700000, colour = "red",label='L5 (Outliers masked in this level)',size = unit(4, "pt"))
+  
+print(pl20)
+
+```
+
+```{r distupbagg,fig.cap="Aggregation performed to unpaid balance",fig.align='center'}
+
+loan_data_new <- loan_data_new %>% mutate(last_upb_grouped= case_when((last_upb <= 1000) ~ "Low/No UPB",
+                                   (last_upb > 1000 & last_upb <= 50000 ) ~ "L1",
+                                   (last_upb > 50000 & last_upb <= 100000) ~ "L2",
+                                   (last_upb > 100000 & last_upb <= 250000) ~ "L3",
+                                   (last_upb > 250000 & last_upb <= 518000) ~ "L4",
+                                   (last_upb > 518000) ~ "L5"))
+
+upb_levels <- c("Low/No UPB","L1","L2","L3","L4","L5","NA")
+
+pl21 <- ggplot(data=loan_data_new %>% count(last_upb_grouped),
+               aes(x=factor(last_upb_grouped,upb_levels,upb_levels),
+                   y=n,
+                   fill =last_upb_grouped)) + 
+  geom_text(aes(label=n),nudge_y = 50000) + theme_classic() +
+  geom_col(color='black') + scale_fill_brewer(palette = "Dark2") +
+  labs(x="Levels for Unpaid Balance (UPB)",y="Number of borrowers") + 
+  ggtitle("Distribution of UPB after aggregation") +
+  theme(legend.position = 'none',axis.text.x = element_text(face='bold'), 
+        axis.text.y = element_text(face='bold'),
+        plot.title = element_text(hjust=0.5)) 
+  
+
+print(pl21)
+                                   
+
+```
+
+
+### 🛠️ Data Perturbration and Cell Suppression
 
 De-identification through the use of perturbation and suppression techniques can be useful to help de-identify any unique values in the dataset. However, the noise added to the dataset must be reasonable and should not drastically skew the dataset.
 
-### <u> Income of main borrower <\u>
+#### <u> Income of main borrower </u>
 
 Since the income of borrowers will be well known to them, in order to mask these values, data can be perturbed by __creating noise in the data__. For outliers, we can apply cell suppression __to replace these high income values with null values__. Figure \@ref(fig:currentincomedist) depicts the boxplots indicating the current distribution of the incomes for various age groups before the addition of noise through perturbation and consequent cell suppression.
 
@@ -285,7 +521,7 @@ The noise addition was performed as a function of the overall magnitude of the i
 As observed through figure \@ref(fig:didinc), the boxplots for various age groups after noise addition and cell suppression __indicate a similar distribution to the original incomes__ for the various age groups in the dataset. 
 
 
-```{r currentincomedist,fig.cap="Income distribution before perturbation and suppression",fig.align='center'}
+```{r currentincomedist,fig.cap="Original income distribution",fig.align='center'}
 
 pl4<- ggplot(data = loan_data_new, aes(y= income,x=)) + geom_boxplot(color='red') + labs(y='Income of main borrower ($)') + facet_grid(~factor(cus_age_group,levels = age_groups)) + ggtitle("Income distribution for various age groups before added noise and cell suppression") +
   theme(axis.text.x = element_blank())
@@ -301,17 +537,138 @@ loan_data_new <- loan_data_new %>%
   
   (income >= quantile(income,0.25)) & (income < quantile(income,0.75)) ~ (income + rnorm(n(),50,500)) ,
   
-  (income >= quantile(income,0.75)) & (income < quantile(income,0.99)) ~ (income + rnorm(n(),500,1000)))) %>% select(-income)  # Perturbation and cell suppression
+  (income >= quantile(income,0.75)) & (income < quantile(income,0.99)) ~ (income + rnorm(n(),500,1000)))) #Perturbation and cell suppression
 
 pl5<- ggplot(data = loan_data_new, aes(y= new_income,na.rm=TRUE)) + geom_boxplot(color='red') + labs(y='Income of main borrower ($)') +  facet_grid(~factor(cus_age_group,levels = age_groups)) + ggtitle("Income distribution after noise and suppression for various age groups") + theme(axis.text.x=element_blank())
 print(pl5)
 
 ```
 
+#### <u> First paid installment date </u>
 
-## Ommision of specific date
+The first paid installment date will be known to the customer as it is well accounted __in their payment summary of their respective banks__. Hence, this data can be easily compared with past records for re-identification. The raw dataset contains a total of `r loan_data_new %>% count(frst_dte) %>% filter(n==1) %>% nrow()` dates that can be uniquely identified as observed through \@ref(tab:tabfrst). In this approach, we __add random noise to the data in the form of months__ which will aid in the de-identification process. Table \@ref(tab:randomfrstpi) lists the original unique first payment date and the new date created to replace these dates after introducing random noise.
 
-### <u> Loan first modifcation date <\u>
+```{r tabfrst}
+
+df_unique <- loan_data_new %>% count(frst_dte) %>% filter(n==1)
+
+unique_dates <- as.Date(df_unique$frst_dte)
+
+df_unique <-data.frame(unique_dates) %>% rename("Unique First Payment Dates"="unique_dates")
+
+df_unique %>% kable(caption = 'Unique first payment date',booktabs = TRUE) %>% 
+  kable_styling(bootstrap_options = c("bordered","hover")) %>%
+  row_spec(0,background="rgb(172,175,145)",color='black',font_size = 18)
+```
+```{r randomfrstpi}
+
+loan_data_new$frst_dte <- as.Date(loan_data_new$frst_dte) 
+
+
+loan_data_new <- loan_data_new %>% mutate(frst_dte_new = ifelse(frst_dte %in% unique_dates, frst_dte + months(floor(runif(1, min=2, max=3)))  ,frst_dte))
+
+loan_data_new$frst_dte_new<- as.Date(loan_data_new$frst_dte_new, origin="1970-1-1")
+
+
+df_new_dates <- loan_data_new %>% filter(frst_dte %in% unique_dates) %>% select(c(frst_dte,frst_dte_new))
+
+df_new_dates <- df_new_dates %>% rename("Original First Payment Date"="frst_dte","New First Payment Date"="frst_dte_new")
+
+
+df_new_dates %>% kable(caption = 'Original and new first payment dates after noise addition',booktabs = TRUE) %>% 
+  kable_styling(bootstrap_options = c("bordered","hover")) %>%
+  row_spec(0,background="rgb(172,175,145)",color='black',font_size = 18)
+
+```
+
+
+#### <u> Last paid installment date </u>
+
+The last paid installment date will be well known to the customer as it is well accounted __in their payment summary of their respective banks__. Hence, this data can be easily compared with past records for re-identification. The raw dataset contains a total of `r loan_data_new %>% count(lpi_dte) %>% filter(n==1) %>% nrow()` dates that can be uniquely identified as observed through \@ref(tab:tablpi). In this approach, we __add random noise to the data in the form of months__ which will aid in the de-identification process.
+
+```{r tablpi}
+
+df_unique <- loan_data_new %>% count(lpi_dte) %>% filter(n==1)
+
+unique_dates <- as.Date(df_unique$lpi_dte)
+
+df_unique <-data.frame(unique_dates) %>% rename("Unique Last Payment Dates"="unique_dates")
+
+df_unique %>% kable(caption = 'Last payment date',booktabs = TRUE) %>% 
+  kable_styling(bootstrap_options = c("bordered","hover")) %>%
+  row_spec(0,background="rgb(172,175,145)",color='black',font_size = 18)
+```
+
+```{r randomlpi}
+
+loan_data_new$lpi_dte <- as.Date(loan_data_new$lpi_dte) 
+
+
+loan_data_new <- loan_data_new %>% mutate(lpi_dte_new = ifelse(lpi_dte %in% unique_dates, lpi_dte + months(floor(runif(1, min=1, max=3)))  ,lpi_dte))
+
+
+loan_data_new$lpi_dte_new<- as.Date(loan_data_new$lpi_dte_new, origin="1970-1-1")
+
+
+df_new_dates <- loan_data_new %>% filter(lpi_dte %in% unique_dates) %>% select(c(lpi_dte,lpi_dte_new))
+
+df_new_dates <- df_new_dates %>% rename("Original Last Payment Date"="lpi_dte","New Last Payment Date"="lpi_dte_new")
+
+
+df_new_dates %>% kable(caption = 'Original and new last payment dates after noise addition',booktabs = TRUE) %>% 
+  kable_styling(bootstrap_options = c("bordered","hover")) %>%
+  row_spec(0,background="rgb(172,175,145)",color='black',font_size = 18)
+
+
+
+```
+
+As we can observe from table \@ref(tab:randomlpi), __random number of months between 1 to 3 months were added to the original dates__ which __does not__ drastically alter the original event date but also successfully allows de-identification of the last payment date done by the borrower.
+
+#### <u> Loan age </u>
+
+Loan age is the number of calendar months since the origination of the mortgage loan. As this data can be easily recorded by a borrower, the unique values need to be de-identified. Currently, there are `r loan_data_new %>% count(loan_age) %>% filter(n==1) %>% nrow()` unique values in the dataset. Random data between 1 to 3 months will be introduced in this dataset.
+
+```{r tabloanage}
+unique_loan_age <- loan_data_new %>% count(loan_age) %>% filter(n==1) %>% pull(loan_age)
+
+loan_data_new <- loan_data_new %>% 
+  mutate(loan_age_new= ifelse(loan_age %in% unique_loan_age,
+                              floor(runif(1,min=1,max=3)) + loan_age,
+                              loan_age))
+
+loan_age_table <- data.frame(loan_data_new %>% filter(loan_age %in% unique_loan_age)) %>% select(c(loan_age,loan_age_new))
+loan_age_table <- loan_age_table %>% rename("Unique original loan age"="loan_age",
+                                            "New loan age"="loan_age_new")
+
+loan_age_table %>% kable(caption = 'Loan age data before and after perturbation ',booktabs = TRUE) %>% 
+  kable_styling(bootstrap_options = c("bordered","hover")) %>%
+  row_spec(0,background="rgb(172,175,145)",color='black',font_size = 18)
+
+
+```
+
+As we can see from table \@ref(tab:tabloanage), the unique loan age data has __some random noise introduced in it__ to aid in de-identification. The noise provided is upto a reasonable limit any change to the distribution of the loan age data as can be observed from figure \@reg(fig:loanage).
+
+```{r loanage, fig.cap='Distribution of loan age before and after noise',fig.align='center'}
+loan_age_long <-loan_data_new %>% pivot_longer(cols = c(loan_age,loan_age_new),
+                                                names_to = 'loan_age_version',
+                                                values_to = 'loan_age_value')
+pl15 <- ggplot(data=loan_age_long,aes(y=loan_age_value,fill=loan_age_version)) + 
+  geom_boxplot() + facet_wrap(~loan_age_version) +
+  theme_classic() + labs(y='Loan age value',fill= 'Loan age') + 
+  ggtitle('Distribution of loan age before and after noise') + 
+  theme(plot.title = element_text(hjust=0.5),axis.text.x = element_blank(),axis.ticks.x = element_blank())
+                                                                                                                  
+print(pl15)
+```
+
+
+
+
+### 🪚 Ommision of specific date
+
+#### <u> Loan first modifcation date </u>
 
 Upon looking into the loan first modification date, we can observe that while the data only contains the month and the year, however for the __year of 2017__, the individual maybe uniquely identified as there is only one observation in the month of __October__. 
 ```{r fmoddate,fig.cap="Loan modification month in 2017",fig.align='center'}
@@ -330,31 +687,149 @@ print(pl9)
 ```
 As we can observe figure \@ref(fig:fmoddate), the individual who got his loan modified in the month of October for the year 2017 can re-identify themselves. We can use the technique of __Ommision of specific date__ which would mask a specific date to aid in the de-identification process. In this process, we can cluster a specific date to a period where multiple other modification dates are present.
 
-```{r fmoddateomit,fig.cap="Loan modification month after date suppression",fig.cap='center'}
-
+```{r fmoddateomit,fig.cap="Loan modification month after date suppression",fig.align='center'}
 
 loan_data_new <- loan_data_new %>% 
   mutate(fmod_dte_new = ifelse(year(fmod_dte)==2017 & month(fmod_dte)==10,
                                ymd("2017-12-01"),
                                fmod_dte)) %>% select(-fmod_dte)
 
-loan_data_new$fmod_dte_new <- as.Date(loan_data_new$fmod_dte_new, origin="1970-1-1")
+loan_data_new$fmod_dte_new <- as.Date(loan_data_new$fmod_dte_new, origin="1970-1-1") #Important to return values to date format after mutate
 
-pl10 <- ggplot(data = loan_data_new %>% filter(year(fmod_dte_new)==2017), aes(x=fmod_dte_new)) + geom_bar(fill='#007f00',color='black') + 
+
+pl10 <- ggplot(data = loan_data_new %>% filter(year(fmod_dte_new)==2017), aes(x=month(fmod_dte_new,label=TRUE))) + geom_bar(fill='#007f00',color='black') + 
   labs(y='Number of borrowers',x='Month of loan modification date') + theme_classic() +
   ggtitle("Loan modification months in 2017 after date suppression") + theme(plot.title = element_text(hjust=0.5)) +
-  scale_y_continuous(labels = as.character(borrowers),breaks = borrowers)
+  scale_y_continuous(labels = as.character(borrowers),breaks = borrowers) 
 print(pl10)
-
 
 ```
 
 As we can observe from \@ref(fig:fmoddateomit), the single individual with loan modification date in October 2017 has been __added to the data of loan modification date in December 2017__. This will prevent re-identification of the person from the dataset.
 
+### 🔩 Rounding data and top coding
+
+Using this technique, __certain values are either rounded up or rounded down to the nearest value__ to match up with other values so as to prevent presence of any unique values which can be used for re-identification. In addition, we can utilise __top coding__ to create an aggregated data which would aid in de-identification. 
+
+#### <u> Account closure balance </u>
+
+As can be observed in the figure \@ref(fig:upbhist), the histogram has a right tail skew indicating high account closure balances are scattered in low numbers. Hence, these __outliers will be top encoded__ to reduce the number unique values in the dataset. Currently, there are `r loan_data_new %>% count(fce_upb) %>% filter(n==1) %>% nrow()` unique values in the dataset. We will now utilise __value rounding and top encoding__ to reduce the number of unique account closure balance values in the dataset.
+
+```{r upbhist,fig.cap='Distribution of Account closure balance before rounding data',fig.align='center'}
+unique_fce_upb <- loan_data_new %>% count(fce_upb) %>% filter(n==1)
+
+pl11 <- ggplot(data=loan_data_new,aes(x=fce_upb)) + geom_histogram(alpha=0.7,color='red') + theme_classic() +
+  labs(x= 'Account closure balance ($)',y= 'Number of individuals') + ggtitle("Account closure balance before rounding and top coding")
+print(pl11)
+
+```
+
+```{r roundupb,fig.cap="Account closure balance after rounding and top coding",fig.align='center'}
+
+fce_upb_outlier <- (IQR(loan_data_new$fce_upb,na.rm = TRUE)*1.5) + quantile(loan_data_new$fce_upb,na.rm=TRUE,0.75)
+
+loan_data_new <- loan_data_new %>% mutate(fce_upb_new=ifelse(fce_upb>=fce_upb_outlier,"> 585000",as.numeric(round(fce_upb,-3))))
+
+pl12 <- ggplot(data=loan_data_new,aes(x=as.numeric(fce_upb_new))) + geom_histogram(alpha=0.7,color='green') + theme_classic() +
+  labs(x= 'Account closure balance ($)',y= 'Number of individuals') + ggtitle("Account closure balance after rounding and top coding")
+print(pl12)
 
 
-# Reference
+```
+ After performing the required operations, we can observe that the tail no longer appears in the histogram as can be observed from figure \@ref(fig:roundupb). The number of unique values in the dataset have now reduced to `r loan_data_new %>% count(fce_upb_new) %>% filter(n==1) %>% nrow()`.
+ Since the number of unique values are minuscule when compared the entire dataset, we can __replace these unique values with "Null (NA) values"__ to prevent any possible de-identification.
+ 
+```{r remove_unique_upb}
 
-Cite your data sources, and software used here. 
+unique_list <- loan_data_new %>% 
+                        count(fce_upb_new) %>% 
+                        filter(n==1) %>%
+                        select(fce_upb_new) 
+
+
+                    
+loan_data_new<- loan_data_new %>% 
+  mutate(fce_upb_final = ifelse( fce_upb %in% pull(unique_list,fce_upb_new),NA,as.numeric(fce_upb_new)))
+
+```
+
+After removing the unique values of account closure balance, we now have `r loan_data_new %>% count(fce_upb_final) %>% filter(n==1) %>% nrow()` similar account closure values which will aid in the de-identification process.
+
+#### <u> Original loan term </u>
+
+Original loan terms are well known to the borrower at the time of loan disbursal. As a result, these values may require to be de-identified. The original dataset contains `r loan_data_new %>% count(orig_trm) %>% filter (n==1) %>% nrow()` unique values. 
+
+In this approach, the original loan term will be __converted from the months to years__. Additionally, these values will be rounded to the __nearest whole number__. Hence, an approximate value of the original loan term will be present. Additionally, for the original terms __less than 5 years, they will be bottom coded to the category "< 5 years"__. As we can observe from table \@ref(tab:tabloantrm), there are no unique loan terms (years).
+
+```{r tabloantrm}
+
+loan_data_new <- loan_data_new %>% mutate(orig_trm_yr= round(orig_trm/12))
+
+loan_data_new <- loan_data_new %>% mutate(orig_trm_yr = ifelse(round(orig_trm/12) < 5,
+                                                               "< 5 years",round(orig_trm/12)))
+
+orig_trm_yr_table <- loan_data_new %>% count(orig_trm_yr) %>% arrange(n) %>% head(5)
+orig_trm_yr_table <- orig_trm_yr_table %>% rename("Original loan term (in years" = "orig_trm_yr",
+                                                  "Number of borrowers" = "n")
+
+orig_trm_yr_table %>% kable(caption = 'Least original loan terms (in years)',booktabs = TRUE) %>% 
+  kable_styling(bootstrap_options = c("bordered","hover")) %>%
+  row_spec(0,background="rgb(172,175,145)",color='black',font_size = 18)
+
+
+```
+### 💡 Final data preparation
+
+```{r}
+
+ommitted_fields <- c("last_upb","no_depend","cus_age","orig_amt",
+                     "cscore_b","cscore_c","num_bo","dti","last_upb",
+                     "income","last_upb","frst_dte","fce_upb",
+                     "orig_trm","repch_flag","orig_trm","orig_rt","last_rt",
+                     "num_bo","fce_upb","lpi_dte","loan_age","income","cus_age","aqsn_dte")
+
+loan_data_new <- loan_data_new %>% select(-c(ommitted_fields))
+
+write_csv(loan_data_new,here::here("data/release-data-Baruah-Arindom.csv"))
+
+
+```
+
+# 👓 Conlusion
+
+The primary aim for any open data release is to make the release dataset suitable for public use which prevents unethical and malicious usage. Hence, it is critical to utilise an appropriate de-identification strategies to prevent recognising details of an individual. Appropriate de-identification methods were implemented to the raw dataset and all unique details were de-identified.
+
+# 🕸️ Data Source and Usage Policy
+
+The dataset is an open data obtained from __Fannie Mae__. Fannie Mae allows the reuse of its data under certain terms and conditions such as for academic and research purposes and is subject to "Royalty-free – Internal Use Only Terms and Conditions".More details on the terms and conditions for usage of the data can be [here](https://capitalmarkets.fanniemae.com/media/20956/display).
+
+
+# 💻 Packages and software used
+
+1. __RStudio__ : RStudio Team (2020). RStudio: Integrated Development for R. RStudio, PBC, Boston, MA URL http://www.rstudio.com/.
+
+2. __Tidyverse__ :  Wickham H, Averick M, Bryan J, Chang W, McGowan LD, François R, Grolemund G, Hayes A, Henry L, Hester J, Kuhn M, Pedersen TL, Miller E, Bache SM, Müller K, Ooms J, Robinson D, Seidel DP, Spinu V, Takahashi K, Vaughan D, Wilke C, Woo K, Yutani H (2019). “Welcome to the
+  tidyverse.” _Journal of Open Source Software_, *4*(43), 1686. doi:10.21105/joss.01686 <https://doi.org/10.21105/joss.01686>.
+  
+3. __ggplot2__ : H. Wickham. ggplot2: Elegant Graphics for Data Analysis. Springer-Verlag New York, 2016.
+
+4. __lubridate__ : Garrett Grolemund, Hadley Wickham (2011). Dates and Times Made Easy with lubridate. Journal of Statistical Software, 40(3), 1-25. URL
+  https://www.jstatsoft.org/v40/i03/.
+
+5. __ggrepel__ : Slowikowski K (2023). _ggrepel: Automatically Position Non-Overlapping Text Labels with 'ggplot2'_. R package version 0.9.3,
+  <https://CRAN.R-project.org/package=ggrepel>.
+
+6. __scales__ : Wickham H, Seidel D (2022). _scales: Scale Functions for Visualization_. R package version 1.2.1,
+  <https://CRAN.R-project.org/package=scales>.
+  
+7. __here__ : Müller K (2020). _here: A Simpler Way to Find Your Files_. R package version 1.0.1, <https://CRAN.R-project.org/package=here>.
+
+8. __kableExtra__ : Zhu H (2021). _kableExtra: Construct Complex Table with 'kable' and Pipe Syntax_. R package version 1.3.4,
+  <https://CRAN.R-project.org/package=kableExtra>.
+  
+
+# 💎 Reference
+
+ 
 
 
